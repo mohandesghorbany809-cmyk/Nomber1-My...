@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=2.0">
+  <title>♟️ بازی شطرنج - گرافیک کامل</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(145deg, #2d2a1e 0%, #1e1b10 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Poppins', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      margin: 0;
+      box-shadow: inset 0 0 80px rgba(0,0,0,0.7);
+    }
+
+    .game-container {
+      background: #4a3f2b;
+      background-image: radial-gradient(circle at 20% 20%, #6b5d3e, #2f2818);
+      border-radius: 60px;
+      padding: 30px 30px 25px;
+      box-shadow: 0 35px 60px rgba(0, 0, 0, 0.8), inset 0 2px 10px rgba(255, 255, 200, 0.4);
+      border: 2px solid #c9aa5f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+
+    .status-panel {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      color: #f3e3b0;
+      font-weight: bold;
+      font-size: 1.3rem;
+      text-shadow: 2px 2px 0 #00000040;
+      background: #1f1a0c90;
+      backdrop-filter: blur(8px);
+      padding: 12px 25px;
+      border-radius: 50px;
+      box-shadow: inset 0 0 12px #00000060, 0 8px 12px black;
+      border: 1px solid #cfb87c;
+    }
+
+    .turn-indicator {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .piece-symbol {
+      font-size: 2.3rem;
+      filter: drop-shadow(0 6px 6px black);
+    }
+
+    #statusMessage {
+      background: #2c2416;
+      padding: 8px 22px;
+      border-radius: 30px;
+      color: #ffdf8c;
+      letter-spacing: 0.5px;
+      border: 1px solid #b5954b;
+    }
+
+    button {
+      background: #c9a449;
+      border: none;
+      color: #261f0f;
+      font-weight: bold;
+      font-size: 1rem;
+      padding: 12px 25px;
+      border-radius: 40px;
+      cursor: pointer;
+      box-shadow: 0 7px 0 #7a5f2c, 0 8px 18px black;
+      transition: 0.1s linear;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border: 1px solid #ffe2a3;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    button:active {
+      transform: translateY(4px);
+      box-shadow: 0 3px 0 #5a431f, 0 6px 12px black;
+      background: #dbb458;
+    }
+
+    canvas {
+      display: block;
+      border-radius: 36px;
+      box-shadow: 0 25px 45px rgba(0, 0, 0, 0.8), inset 0 0 0 3px #ab8a4b, inset 0 0 20px #00000050;
+      background: #deb887;
+      width: 100%;
+      height: auto;
+      max-width: 600px;
+      aspect-ratio: 1 / 1;
+      margin: 5px 0;
+    }
+
+    .footer-info {
+      margin-top: 16px;
+      color: #e7d7a8;
+      font-size: 0.9rem;
+      display: flex;
+      gap: 30px;
+      align-items: center;
+      background: #00000030;
+      padding: 6px 28px;
+      border-radius: 30px;
+    }
+
+    @media (max-width: 500px) {
+      .game-container {
+        padding: 15px;
+      }
+      .status-panel {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="game-container">
+  <div class="status-panel">
+    <div class="turn-indicator">
+      <span class="piece-symbol" id="turnIcon">♙</span>
+      <span id="statusMessage">نوبت سفید</span>
+    </div>
+    <button id="restartButton"><span>🔄</span> بازی جدید</button>
+  </div>
+  <canvas id="chessCanvas" width="600" height="600" aria-label="صفحه شطرنج"></canvas>
+  <div class="footer-info">
+    <span>⚡ حرکت با کلیک</span>
+    <span id="captureInfo"></span>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // --------------------------------------------------------------
+    // 1. منطق کامل شطرنج (بدون کتابخانه)
+    // --------------------------------------------------------------
+    const PIECE_NONE = 0;
+    const PIECE_PAWN = 1;
+    const PIECE_ROOK = 2;
+    const PIECE_KNIGHT = 3;
+    const PIECE_BISHOP = 4;
+    const PIECE_QUEEN = 5;
+    const PIECE_KING = 6;
+
+    const COLOR_WHITE = 1;
+    const COLOR_BLACK = 2;
+
+    // مقداردهی اولیه تخته استاندارد
+    function createInitialBoard() {
+      // board[row][col] = { piece, color }  (ردیف 0 بالا = ردیف 8 شطرنجی از دید سیاه, ولی ما برعکس می‌کنیم)
+      // برای راحتی: ردیف 0 = ردیف 8 (بالای تخته) , ردیف 7 = ردیف 1 (پایین)
+      // ولی در نمایش چرخانده می‌شود: سفید پایین، سیاه بالا.
+      const board = Array(8).fill().map(() => Array(8).fill().map(() => ({ piece: PIECE_NONE, color: 0 })));
+
+      // مهره‌های سیاه (بالا) - ردیف 0 و 1
+      const backRowBlack = [PIECE_ROOK, PIECE_KNIGHT, PIECE_BISHOP, PIECE_QUEEN, PIECE_KING, PIECE_BISHOP, PIECE_KNIGHT, PIECE_ROOK];
+      for (let col = 0; col < 8; col++) {
+        board[0][col] = { piece: backRowBlack[col], color: COLOR_BLACK };
+        board[1][col] = { piece: PIECE_PAWN, color: COLOR_BLACK };
+      }
+
+      // مهره‌های سفید (پایین) - ردیف 6 و 7
+      const backRowWhite = [PIECE_ROOK, PIECE_KNIGHT, PIECE_BISHOP, PIECE_QUEEN, PIECE_KING, PIECE_BISHOP, PIECE_KNIGHT, PIECE_ROOK];
+      for (let col = 0; col < 8; col++) {
+        board[6][col] = { piece: PIECE_PAWN, color: COLOR_WHITE };
+        board[7][col] = { piece: backRowWhite[col], color: COLOR_WHITE };
+      }
+      return board;
+    }
+
+    // کلون عمیق تخته
+    function cloneBoard(board) {
+      return board.map(row => row.map(cell => ({ piece: cell.piece, color: cell.color })));
+    }
+
+    // بررسی مختصات داخل تخته
+    function isValidCell(row, col) {
+      return row >= 0 && row < 8 && col >= 0 && col < 8;
+    }
+
+    // گرفتن حرکات قانونی خام (بدون در نظر گرفتن کیش خودی)
+    function getRawMoves(board, row, col, piece, color) {
+      const moves = [];
+      const opponentColor = color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE;
+
+      const addMove = (r, c) => {
+        if (!isValidCell(r, c)) return false;
+        const target = board[r][c];
+        if (target.color === color) return false; // مسدود توسط خودی
+        moves.push({ row: r, col: c });
+        return target.color === opponentColor; // اگر حریف باشد، نمی‌توان از آن عبور کرد (برای پیاده نه)
+      };
+
+      const addSlidingMoves = (dr, dc) => {
+        let r = row + dr;
+        let c = col + dc;
+        while (isValidCell(r, c)) {
+          const target = board[r][c];
+          if (target.color === color) break;
+          moves.push({ row: r, col: c });
+          if (target.color === opponentColor) break;
+          r += dr;
+          c += dc;
+        }
+      };
+
+      switch (piece) {
+        case PIECE_PAWN:
+          const direction = color === COLOR_WHITE ? -1 : 1;
+          const startRow = color === COLOR_WHITE ? 6 : 1;
+          // حرکت مستقیم
+          const oneStepRow = row + direction;
+          if (isValidCell(oneStepRow, col) && board[oneStepRow][col].piece === PIECE_NONE) {
+            moves.push({ row: oneStepRow, col: col });
+            // دو قدمی
+            if (row === startRow) {
+              const twoStepRow = row + 2 * direction;
+              if (isValidCell(twoStepRow, col) && board[twoStepRow][col].piece === PIECE_NONE) {
+                moves.push({ row: twoStepRow, col: col });
+              }
+            }
+          }
+          // گرفتن مورب
+          for (const dc of [-1, 1]) {
+            const attackRow = row + direction;
+            const attackCol = col + dc;
+            if (isValidCell(attackRow, attackCol)) {
+              const target = board[attackRow][attackCol];
+              if (target.color === opponentColor) {
+                moves.push({ row: attackRow, col: attackCol });
+              }
+            }
+          }
+          // آن پاسانت بعداً اضافه می‌شود (در فیلتر کیش)
+          break;
+
+        case PIECE_ROOK:
+          for (const [dr, dc] of [[1,0], [-1,0], [0,1], [0,-1]]) addSlidingMoves(dr, dc);
+          break;
+
+        case PIECE_KNIGHT:
+          const knightJumps = [[-2,-1], [-2,1], [-1,-2], [-1,2], [1,-2], [1,2], [2,-1], [2,1]];
+          knightJumps.forEach(([dr, dc]) => addMove(row+dr, col+dc));
+          break;
+
+        case PIECE_BISHOP:
+          for (const [dr, dc] of [[1,1], [1,-1], [-1,1], [-1,-1]]) addSlidingMoves(dr, dc);
+          break;
+
+        case PIECE_QUEEN:
+          for (const [dr, dc] of [[1,0], [-1,0], [0,1], [0,-1], [1,1], [1,-1], [-1,1], [-1,-1]]) addSlidingMoves(dr, dc);
+          break;
+
+        case PIECE_KING:
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              if (dr === 0 && dc === 0) continue;
+              addMove(row+dr, col+dc);
+            }
+          }
+          // قلعه رفتن بعداً (در بخش قانونی) اضافه می‌شود
+          break;
+      }
+      return moves;
+    }
+
+    // پیدا کردن موقعیت شاه یک رنگ
+    function findKing(board, color) {
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (board[r][c].piece === PIECE_KING && board[r][c].color === color) {
+            return { row: r, col: c };
+          }
+        }
+      }
+      return null;
+    }
+
+    // بررسی اینکه خانه مورد نظر توسط color مورد حمله است؟
+    function isSquareAttacked(board, row, col, attackerColor) {
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const cell = board[r][c];
+          if (cell.color === attackerColor) {
+            const moves = getRawMoves(board, r, c, cell.piece, attackerColor);
+            if (moves.some(m => m.row === row && m.col === col)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    // تولید حرکات قانونی کامل با احتساب کیش، آن پاسانت، قلعه
+    function getLegalMoves(board, row, col, gameState) {
+      const cell = board[row][col];
+      if (!cell || cell.piece === PIECE_NONE) return [];
+      const color = cell.color;
+      let moves = getRawMoves(board, row, col, cell.piece, color);
+
+      // اضافه کردن آن پاسانت
+      if (cell.piece === PIECE_PAWN && gameState.enPassantTarget) {
+        const ep = gameState.enPassantTarget;
+        const direction = color === COLOR_WHITE ? -1 : 1;
+        if (row + direction === ep.row && Math.abs(col - ep.col) === 1) {
+          moves.push({ row: ep.row, col: ep.col });
+        }
+      }
+
+      // اضافه کردن قلعه
+      if (cell.piece === PIECE_KING && !gameState.kingMoved[color] && !gameState.inCheck) {
+        const backRow = color === COLOR_WHITE ? 7 : 0;
+        if (row === backRow && col === 4) {
+          // قلعه سمت شاه (سمت راست سفید = ستون 7)
+          if (!gameState.rookMoved[color][1]) { // 1 برای سمت شاه
+            const rookCol = 7;
+            if (board[backRow][rookCol].piece === PIECE_ROOK && board[backRow][rookCol].color === color) {
+              if (board[backRow][5].piece === PIECE_NONE && board[backRow][6].piece === PIECE_NONE) {
+                if (!isSquareAttacked(board, backRow, 4, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE) &&
+                    !isSquareAttacked(board, backRow, 5, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE) &&
+                    !isSquareAttacked(board, backRow, 6, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE)) {
+                  moves.push({ row: backRow, col: 6 });
+                }
+              }
+            }
+          }
+          // قلعه سمت وزیر
+          if (!gameState.rookMoved[color][0]) {
+            const rookCol = 0;
+            if (board[backRow][rookCol].piece === PIECE_ROOK && board[backRow][rookCol].color === color) {
+              if (board[backRow][1].piece === PIECE_NONE && board[backRow][2].piece === PIECE_NONE && board[backRow][3].piece === PIECE_NONE) {
+                if (!isSquareAttacked(board, backRow, 4, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE) &&
+                    !isSquareAttacked(board, backRow, 3, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE) &&
+                    !isSquareAttacked(board, backRow, 2, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE)) {
+                  moves.push({ row: backRow, col: 2 });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // فیلتر حرکاتی که شاه را در معرض کیش قرار می‌دهند
+      const legalMoves = [];
+      for (let move of moves) {
+        const tempBoard = cloneBoard(board);
+        // اجرای حرکت روی تخته موقت
+        tempBoard[move.row][move.col] = { piece: cell.piece, color: cell.color };
+        tempBoard[row][col] = { piece: PIECE_NONE, color: 0 };
+        // حذف پیاده آن پاسانت شده
+        if (cell.piece === PIECE_PAWN && gameState.enPassantTarget && move.row === gameState.enPassantTarget.row && move.col === gameState.enPassantTarget.col) {
+          const capturedRow = color === COLOR_WHITE ? move.row + 1 : move.row - 1;
+          tempBoard[capturedRow][move.col] = { piece: PIECE_NONE, color: 0 };
+        }
+        const kingPos = findKing(tempBoard, color);
+        if (kingPos && !isSquareAttacked(tempBoard, kingPos.row, kingPos.col, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE)) {
+          legalMoves.push(move);
+        }
+      }
+      return legalMoves;
+    }
+
+    // بررسی کیش بودن
+    function isKingInCheck(board, color) {
+      const king = findKing(board, color);
+      if (!king) return true; // شاه نیست یعنی مات
+      return isSquareAttacked(board, king.row, king.col, color === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE);
+    }
+
+    // بررسی مات یا پات
+    function getGameStatus(board, gameState, currentTurn) {
+      const color = currentTurn;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (board[r][c].color === color) {
+            if (getLegalMoves(board, r, c, gameState).length > 0) {
+              return 'playing';
+            }
+          }
+        }
+      }
+      if (isKingInCheck(board, color)) return 'checkmate';
+      return 'stalemate';
+    }
+
+    // --------------------------------------------------------------
+    // 2. وضعیت بازی
+    // --------------------------------------------------------------
+    let board = createInitialBoard();
+    let currentPlayer = COLOR_WHITE;
+    let selectedRow = -1, selectedCol = -1;
+    let legalMovesForSelected = [];
+
+    // اطلاعات اضافی برای قلعه و آن پاسانت
+    let gameState = {
+      kingMoved: { [COLOR_WHITE]: false, [COLOR_BLACK]: false },
+      rookMoved: {
+        [COLOR_WHITE]: [false, false], // [سمت وزیر, سمت شاه]
+        [COLOR_BLACK]: [false, false]
+      },
+      enPassantTarget: null, // { row, col }
+      inCheck: false
+    };
+
+    let gameOver = false;
+    let winnerMessage = '';
+
+    // به‌روزرسانی وضعیت کیش
+    function updateCheckStatus() {
+      gameState.inCheck = isKingInCheck(board, currentPlayer);
+    }
+
+    // بازنشانی بازی
+    function restartGame() {
+      board = createInitialBoard();
+      currentPlayer = COLOR_WHITE;
+      selectedRow = -1;
+      selectedCol = -1;
+      legalMovesForSelected = [];
+      gameState = {
+        kingMoved: { [COLOR_WHITE]: false, [COLOR_BLACK]: false },
+        rookMoved: {
+          [COLOR_WHITE]: [false, false],
+          [COLOR_BLACK]: [false, false]
+        },
+        enPassantTarget: null,
+        inCheck: false
+      };
+      gameOver = false;
+      winnerMessage = '';
+      updateCheckStatus();
+      drawBoard();
+    }
+
+    // اجرای حرکت
+    function executeMove(fromRow, fromCol, toRow, toCol) {
+      const piece = board[fromRow][fromCol].piece;
+      const color = board[fromRow][fromCol].color;
+      const captured = board[toRow][toCol];
+
+      // به‌روزرسانی حرکت شاه و رخ
+      if (piece === PIECE_KING) {
+        gameState.kingMoved[color] = true;
+        // قلعه
+        if (Math.abs(toCol - fromCol) === 2) {
+          const rookFromCol = toCol === 6 ? 7 : 0;
+          const rookToCol = toCol === 6 ? 5 : 3;
+          board[fromRow][rookToCol] = { piece: PIECE_ROOK, color: color };
+          board[fromRow][rookFromCol] = { piece: PIECE_NONE, color: 0 };
+        }
+      }
+      if (piece === PIECE_ROOK) {
+        const backRow = color === COLOR_WHITE ? 7 : 0;
+        if (fromRow === backRow) {
+          if (fromCol === 0) gameState.rookMoved[color][0] = true;
+          if (fromCol === 7) gameState.rookMoved[color][1] = true;
+        }
+      }
+
+      // آن پاسانت
+      let enPassantCaptured = false;
+      if (piece === PIECE_PAWN && gameState.enPassantTarget && toRow === gameState.enPassantTarget.row && toCol === gameState.enPassantTarget.col) {
+        const capturedRow = color === COLOR_WHITE ? toRow + 1 : toRow - 1;
+        board[capturedRow][toCol] = { piece: PIECE_NONE, color: 0 };
+        enPassantCaptured = true;
+      }
+
+      // حرکت مهره
+      board[toRow][toCol] = { piece: piece, color: color };
+      board[fromRow][fromCol] = { piece: PIECE_NONE, color: 0 };
+
+      // تنظیم آن پاسانت بعدی
+      gameState.enPassantTarget = null;
+      if (piece === PIECE_PAWN && Math.abs(toRow - fromRow) === 2) {
+        const epRow = (fromRow + toRow) / 2;
+        gameState.enPassantTarget = { row: epRow, col: fromCol };
+      }
+
+      // ارتقا پیاده (اتوماتیک وزیر)
+      if (piece === PIECE_PAWN && (toRow === 0 || toRow === 7)) {
+        board[toRow][toCol].piece = PIECE_QUEEN;
+      }
+
+      // تغییر نوبت
+      currentPlayer = currentPlayer === COLOR_WHITE ? COLOR_BLACK : COLOR_WHITE;
+      updateCheckStatus();
+
+      const status = getGameStatus(board, gameState, currentPlayer);
+      if (status === 'checkmate') {
+        gameOver = true;
+        winnerMessage = currentPlayer === COLOR_WHITE ? 'سیاه برنده شد (کیش و مات)' : 'سفید برنده شد (کیش و مات)';
+      } else if (status === 'stalemate') {
+        gameOver = true;
+        winnerMessage = 'پات! بازی مساوی';
+      }
+    }
+
+    // --------------------------------------------------------------
+    // 3. گرافیک و Canvas
+    // --------------------------------------------------------------
+    const canvas = document.getElementById('chessCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusMessageEl = document.getElementById('statusMessage');
+    const turnIconEl = document.getElementById('turnIcon');
+    const captureInfoEl = document.getElementById('captureInfo');
+
+    const squareSize = canvas.width / 8;
+    const lightColor = '#f0d9b5';
+    const darkColor = '#b58863';
+    const highlightColor = 'rgba(255, 255, 80, 0.65)';
+    const selectedColor = 'rgba(70, 180, 255, 0.6)';
+    const moveDotColor = 'rgba(0,0,0,0.25)';
+
+    const pieceSymbols = {
+      [PIECE_KING]: { [COLOR_WHITE]: '♔', [COLOR_BLACK]: '♚' },
+      [PIECE_QUEEN]: { [COLOR_WHITE]: '♕', [COLOR_BLACK]: '♛' },
+      [PIECE_ROOK]: { [COLOR_WHITE]: '♖', [COLOR_BLACK]: '♜' },
+      [PIECE_BISHOP]: { [COLOR_WHITE]: '♗', [COLOR_BLACK]: '♝' },
+      [PIECE_KNIGHT]: { [COLOR_WHITE]: '♘', [COLOR_BLACK]: '♞' },
+      [PIECE_PAWN]: { [COLOR_WHITE]: '♙', [COLOR_BLACK]: '♟' },
+    };
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // رسم خانه‌ها
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const x = c * squareSize;
+          const y = r * squareSize;
+          ctx.fillStyle = (r + c) % 2 === 0 ? lightColor : darkColor;
+          ctx.fillRect(x, y, squareSize, squareSize);
+
+          // هایلایت خانه انتخاب شده
+          if (selectedRow === r && selectedCol === c && !gameOver) {
+            ctx.fillStyle = selectedColor;
+            ctx.fillRect(x, y, squareSize, squareSize);
+          }
+
+          // نمایش حرکات مجاز
+          if (legalMovesForSelected.some(m => m.row === r && m.col === c)) {
+            ctx.beginPath();
+            ctx.arc(x + squareSize/2, y + squareSize/2, squareSize*0.2, 0, 2*Math.PI);
+            ctx.fillStyle = moveDotColor;
+            ctx.fill();
+            if (board[r][c].piece !== PIECE_NONE) {
+              ctx.strokeStyle = '#c0392b';
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.arc(x + squareSize/2, y + squareSize/2, squareSize*0.38, 0, 2*Math.PI);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      // رسم مهره‌ها
+      ctx.font = `bold ${squareSize * 0.72}px "Segoe UI Symbol", "Arial Unicode MS", "Noto Sans", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const cell = board[r][c];
+          if (cell.piece !== PIECE_NONE) {
+            const symbol = pieceSymbols[cell.piece][cell.color];
+            const x = c * squareSize + squareSize / 2;
+            const y = r * squareSize + squareSize / 2;
+            ctx.shadowColor = '#00000080';
+            ctx.shadowBlur = 7;
+            ctx.fillStyle = cell.color === COLOR_WHITE ? '#ffffff' : '#2c2c2c';
+            ctx.fillText(symbol, x, y);
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            // لبه بیرونی
+            ctx.strokeStyle = '#00000040';
+            ctx.lineWidth = 1.5;
+            ctx.strokeText(symbol, x, y);
+          }
+        }
+      }
+
+      // بروزرسانی متن وضعیت
+      if (gameOver) {
+        statusMessageEl.textContent = winnerMessage;
+        turnIconEl.textContent = '🏆';
+      } else {
+        const turnText = currentPlayer === COLOR_WHITE ? 'نوبت سفید' : 'نوبت سیاه';
+        statusMessageEl.textContent = gameState.inCheck ? `کیش - ${turnText}` : turnText;
+        turnIconEl.textContent = currentPlayer === COLOR_WHITE ? '♙' : '♟';
+      }
+      captureInfoEl.textContent = gameOver ? 'پایان' : '';
+    }
+
+    // تبدیل کلیک به مختصات
+    function handleCanvasClick(e) {
+      if (gameOver) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;   // نسبت مقیاس
+      const scaleY = canvas.height / rect.height;
+
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+
+      const col = Math.floor(mouseX / squareSize);
+      const row = Math.floor(mouseY / squareSize);
+      if (!isValidCell(row, col)) return;
+
+      // اگر قبلاً مهره‌ای انتخاب شده و حرکت قانونی است
+      if (selectedRow !== -1 && selectedCol !== -1) {
+        const moveExists = legalMovesForSelected.some(m => m.row === row && m.col === col);
+        if (moveExists) {
+          executeMove(selectedRow, selectedCol, row, col);
+          selectedRow = -1;
+          selectedCol = -1;
+          legalMovesForSelected = [];
+          drawBoard();
+          return;
+        }
+      }
+
+      // انتخاب جدید
+      const clickedPiece = board[row][col];
+      if (clickedPiece.piece !== PIECE_NONE && clickedPiece.color === currentPlayer) {
+        selectedRow = row;
+        selectedCol = col;
+        legalMovesForSelected = getLegalMoves(board, row, col, gameState);
+      } else {
+        selectedRow = -1;
+        selectedCol = -1;
+        legalMovesForSelected = [];
+      }
+      drawBoard();
+    }
+
+    canvas.addEventListener('click', handleCanvasClick);
+    document.getElementById('restartButton').addEventListener('click', restartGame);
+
+    // رسم اولیه
+    updateCheckStatus();
+    drawBoard();
+  })();
+</script>
+</body>
+</html>
+
